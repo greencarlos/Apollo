@@ -1,32 +1,74 @@
 import React, { useState, useEffect } from "react";
-import ReactDOM from "react-dom";
+import * as ReactDOM from "react-dom/client";
+import {
+  ApolloClient,
+  useLazyQuery,
+  InMemoryCache,
+  ApolloProvider,
+  useMutation,
+  gql,
+} from "@apollo/client";
+
+const client = new ApolloClient({
+  uri: "/graphql",
+  cache: new InMemoryCache(),
+});
+
+const debounce = (func, delay) => {
+  let debouceTimer
+  return function() {
+    const context = this
+    const args = aguments
+    clearTimeout(debouceTimer)
+    debouceTimer = setTimeout(() => func.apply(context, args), delay)
+  }
+}
+
+const FILES_QUERY = gql`
+  query Lessons($str: String, $getPokemonStr2: String) {
+    search(str: $str) {
+      image
+      name
+    }
+    getPokemon(str: $getPokemonStr2) {
+      image
+      name
+    }
+  }
+`;
+
+client.query({
+  query: gql`
+    query GetPokemon {
+      lessons {
+        title
+      }
+    }
+  `,
+});
 
 const Pokemon = () => {
+  const [profile, setProfile] = useState(<div></div>);
   const [monster, setMonster] = useState({
     name: "",
     image: null,
   });
+  const [getPokemon, { loading, error, data }] = useLazyQuery(FILES_QUERY, {
+    variables: { str: monster.name },
+  });
+  //const [searchPokemon, {loading, error, data}] = useMutation(FILES_QUERY)
 
-  const [profile, setProfile] = useState(<div></div>);
+  if (loading) return <h3>Loading...</h3>;
+  if (error) return <h3>Error</h3>;
 
   const listNames = async (pokemon) => {
-    const list = await fetch("/graphql", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        query: `{search(str: "${pokemon}") {name }}`,
-      }),
-    })
-      .then((res) => res.json())
-      .then((result) => {
-        return result.data;
-      });
+    await setMonster({ name: pokemon });
+    const data = await getPokemon(pokemon).then(res => res.data)
 
-    const monsterNames = list.search.map((monster, idx) => {
+    const monsterNames = data.search.map((monster, idx) => {
       const MLen = monster.name.length;
       const pLen = pokemon.length;
+      if (!monster.name.includes(pokemon)) return <></>;
 
       const pokeIdx = monster.name.indexOf(pokemon);
       const start = monster.name.slice(0, pokeIdx);
@@ -48,10 +90,10 @@ const Pokemon = () => {
       );
     });
 
-    setProfile(monsterNames);
+    await setProfile(monsterNames);
   };
 
-  const searchName = (name) => {
+  const searchName = async (name) => {
     if (name.length === 0) return;
 
     fetch("/graphql", {
@@ -103,4 +145,10 @@ const Pokemon = () => {
   );
 };
 
-ReactDOM.render(<Pokemon />, document.querySelector(".pokemon"));
+const root = ReactDOM.createRoot(document.querySelector(".pokemon"));
+
+root.render(
+  <ApolloProvider client={client}>
+    <Pokemon />
+  </ApolloProvider>
+);
