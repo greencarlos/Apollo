@@ -5,7 +5,6 @@ import {
   useLazyQuery,
   InMemoryCache,
   ApolloProvider,
-  useMutation,
   gql,
 } from "@apollo/client";
 
@@ -14,23 +13,18 @@ const client = new ApolloClient({
   cache: new InMemoryCache(),
 });
 
-const debounce = (func, delay) => {
-  let debouceTimer
-  return function() {
-    const context = this
-    const args = aguments
-    clearTimeout(debouceTimer)
-    debouceTimer = setTimeout(() => func.apply(context, args), delay)
-  }
-}
-
-const FILES_QUERY = gql`
-  query Lessons($str: String, $getPokemonStr2: String) {
+const SEARCH_QUERY = gql`
+  query Query($str: String) {
     search(str: $str) {
       image
       name
     }
-    getPokemon(str: $getPokemonStr2) {
+  }
+`;
+
+const POKEMON_QUERY = gql`
+  query GetPokemon($str: String) {
+    getPokemon(str: $str) {
       image
       name
     }
@@ -48,38 +42,46 @@ client.query({
 });
 
 const Pokemon = () => {
+  let timeoutId;
   const [profile, setProfile] = useState(<div></div>);
   const [monster, setMonster] = useState({
     name: "",
     image: null,
   });
-  const [getPokemon, { loading, error, data }] = useLazyQuery(FILES_QUERY, {
-    variables: { str: monster.name },
-  });
-  //const [searchPokemon, {loading, error, data}] = useMutation(FILES_QUERY)
+  const [search, { loading, error, data }] = useLazyQuery(SEARCH_QUERY);
+  const [getPokemon, { loadingPoke, errorPoke, dataPoke }] =
+    useLazyQuery(POKEMON_QUERY);
 
-  if (loading) return <h3>Loading...</h3>;
-  if (error) return <h3>Error</h3>;
+  if (loadingPoke) return <h3>Loading...</h3>;
+  if (errorPoke) return <h3>Error</h3>;
 
   const listNames = async (pokemon) => {
-    await setMonster({ name: pokemon });
-    const data = await getPokemon(pokemon).then(res => res.data)
+    const monster = await search({ variables: { str: pokemon } });
+    const monsterName = monster.data.search[0].name;
 
-    const monsterNames = data.search.map((monster, idx) => {
-      const MLen = monster.name.length;
+    await setMonster({ name: monsterName });
+
+    const listMonsters = monster.data.search.map(async ({ name }) => {
+      return await getPokemon({ variables: { str: name } }).then(
+        (res) => res.data.getPokemon
+      );
+    });
+
+    const monsters = await Promise.all(listMonsters).then((res) => res);
+
+    const monsterNames = monsters.map(({ name, image }, idx) => {
+      const MLen = name.length;
       const pLen = pokemon.length;
-      if (!monster.name.includes(pokemon)) return <></>;
-
-      const pokeIdx = monster.name.indexOf(pokemon);
-      const start = monster.name.slice(0, pokeIdx);
-      const end = monster.name.slice(pokeIdx + pLen, MLen);
+      const pokeIdx = name.indexOf(pokemon);
+      const start = name.slice(0, pokeIdx);
+      const end = name.slice(pokeIdx + pLen, MLen);
 
       return (
         <div key={idx}>
           <div
             className="row"
             onClick={() => {
-              searchName(monster.name);
+              searchName(name);
             }}
           >
             <p>{start}</p>
@@ -96,17 +98,8 @@ const Pokemon = () => {
   const searchName = async (name) => {
     if (name.length === 0) return;
 
-    fetch("/graphql", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        query: `{getPokemon(str: "${name}") {name, image }}`,
-      }),
-    })
-      .then((result) => result.json())
-      .then((result) => {
+    const monster = await getPokemon({ variables: { str: name } }).then(
+      (result) => {
         const pokemon = result.data.getPokemon;
         setMonster(pokemon);
         localStorage.setItem("pokemon", JSON.stringify(pokemon));
@@ -124,7 +117,8 @@ const Pokemon = () => {
             </button>
           </div>
         );
-      });
+      }
+    );
   };
 
   return (
@@ -133,9 +127,10 @@ const Pokemon = () => {
       <input
         className="input"
         onKeyDown={(e) => {
+          clearTimeout(timeoutId);
           const name = e.target.value.toLowerCase();
           if (name.length < 2) return;
-          setTimeout(() => {
+          timeoutId = setTimeout(() => {
             listNames(name);
           }, 2000);
         }}

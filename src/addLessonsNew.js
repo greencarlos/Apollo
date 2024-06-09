@@ -38,25 +38,49 @@ const Stars = () => {
   const stars = [1, 2, 3, 4, 5].map((star, i) => {
     let iconClass = star <= value ? "fas" : "far";
 
+    return <></>;
+
     return (
       <i
         className={`${iconClass} fa-star star`}
-        key={star}
-        onMouseMove={() => {
-          setValue(star);
-        }}
+        key={star + i + value}
+        onMouseMove={() => setValue(star)}
       ></i>
     );
   });
 
+  console.log("stars", stars);
   return <div>{stars}</div>;
 };
 
-const AddLessons = () => {
+const lessons = await fetch("/graphql", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    query: `{ lessons {title} } `,
+  }),
+})
+  .then((res) => res.json())
+  .then((res) => {
+    return res.data.lessons.map((lesson) => {
+      return lesson.title;
+    });
+  });
+
+const AddLessons = async () => {
   const { loading, error, data } = useQuery(LESSON_QUERY);
   const pokemon = JSON.parse(localStorage.getItem("pokemon"));
+
   const [enrolled, setEnrolled] = useState([]);
-  const [unenrolled, setUnenrolled] = useState(data.lessons.map(e) => e.title);
+  const [unenrolled, setUnenrolled] = useState([]);
+  console.log(
+    "loading",
+    loading,
+    "data",
+    data.lessons.map((ele) => ele.title)
+  );
 
   const Enroll = (lesson) => {
     setEnrolled([lesson, ...enrolled]);
@@ -109,4 +133,3 @@ root.render(
     <Stars />
   </ApolloProvider>
 );
-
